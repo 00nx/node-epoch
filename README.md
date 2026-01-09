@@ -13,7 +13,7 @@ Current typical jitter: **1–10 ms** (often better than native `setTimeout` und
 - Non-blocking (uses Windows thread pool)
 - Supports units: seconds, milliseconds, microseconds, nanoseconds
 - Very low overhead compared to busy-wait approaches
-- Designed for latency-sensitive use-cases (Discord vanity sniping, trading, automation)
+- Designed for latency-sensitive use-cases 
 
 ## Installation
 
@@ -77,3 +77,13 @@ cd node-epoch
 npm install
 npm run build
 ```
+
+
+
+
+## Why this over setTimeout?
+
+- Better accuracy for absolute timestamps
+- Less drift under system load
+- Designed for trigger patterns where 10–50 ms can make a difference
+
