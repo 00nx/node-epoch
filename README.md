@@ -20,6 +20,5 @@ Current typical jitter: **1–10 ms** (often better than native `setTimeout` und
 ```bash
 # Recommended: from GitHub (latest version)
 npm install github:00nx/node-epoch
+```
 
-# or after publishing to npm:
-# npm install node-epoch
