@@ -1,0 +1,9 @@
+build/
+node_modules/
+*.node
+*.pdb
+*.exp
+*.lib
+*.obj
+*.log
+.DS_Store

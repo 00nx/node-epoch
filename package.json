@@ -1,0 +1,43 @@
+{
+  "name": "node-epoch",
+  "version": "0.1.0",
+  "description": "High-precision absolute epoch timer for Node.js on Windows using TimerQueue",
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "binding.gyp",
+    "src/"
+  ],
+  "keywords": [
+    "timer",
+    "epoch",
+    "windows",
+    "precise",
+    "trading",
+    "low-latency",
+    "realtime"
+  ],
+  "author": "aswin (@6crypt)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/00nx/node-epoch"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean",
+    "install": "node-gyp rebuild"
+  },
+  "gypfile": true,
+  "os": ["win32"],
+  "cpu": ["x64", "ia32"],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
