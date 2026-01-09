@@ -61,3 +61,10 @@ setEpochTimer(
   callback: () => void
 ): void
 ```
+
+- unit — time unit of the target timestamp
+- value — absolute Unix timestamp in the given unit
+- callback — function to execute when the target time is reached
+
+**If the target time is in the past or now → callback runs immediately (next tick).**
+
