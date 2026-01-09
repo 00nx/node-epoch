@@ -50,3 +50,14 @@ setEpochTimer("ms", now + 5000, () => {
 });
 
 ```
+
+
+## api 
+
+```js
+setEpochTimer(
+  unit: "s" | "ms" | "us" | "ns",
+  value: number,
+  callback: () => void
+): void
+```
