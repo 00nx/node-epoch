@@ -68,3 +68,12 @@ setEpochTimer(
 
 **If the target time is in the past or now → callback runs immediately (next tick).**
 
+
+# Build from source
+
+```bash
+git clone https://github.com/00nx/node-epoch.git
+cd node-epoch
+npm install
+npm run build
+```
