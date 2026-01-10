@@ -1,7 +1,11 @@
-# node-epoch
+<h1>node-epoch</h1>
 
-**High-precision absolute epoch timer for Node.js on Windows**  
-Ultra-low jitter timer using Windows Timer Queue — perfect for sniping, trading  and real-time applications where `setTimeout` is too slow or drifts too much.
+<p>
+<b>High-precision absolute epoch timer for Node.js on Windows</b><br>
+Ultra-low jitter timer using Windows Timer Queue — perfect for 
+trading, and real-time applications where <code>setTimeout</code> is too slow
+or drifts too much.
+</p>
 
 Current typical jitter: **1–10 ms** (often better than native `setTimeout` under load)
 
@@ -86,4 +90,5 @@ npm run build
 - Better accuracy for absolute timestamps
 - Less drift under system load
 - Designed for trigger patterns where 10–50 ms can make a difference
+
 
