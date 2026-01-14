@@ -12,6 +12,11 @@
     std::cerr << oss.str(); \
 } while(0)
 
+#define LOG_ERROR(msg) do { \
+    std::ostringstream oss; \
+    oss << "[epoch-timer ERROR " << current_epoch_ms() << "ms] " << msg << std::endl; \
+    std::cerr << oss.str(); \
+} while(0)
 
 struct TimerState {
     Napi::ThreadSafeFunction tsfn;
