@@ -42,8 +42,8 @@ napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function j
         jsCb.Call({});
     });
 
-    if (status != napi_ok) {
-
+if (status != napi_ok) {
+        LOG_ERROR("ThreadSafeFunction.BlockingCall failed: " << status);
     }
 
     // Cleanup
