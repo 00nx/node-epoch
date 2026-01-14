@@ -3,6 +3,8 @@
 #include <memory>
 #include <unordered_map>
 #include <mutex>
+#include <iostream>
+#include <sstream>
 
 struct TimerState {
     Napi::ThreadSafeFunction tsfn;
