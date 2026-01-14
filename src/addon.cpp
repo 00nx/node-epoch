@@ -14,7 +14,6 @@ struct TimerState {
 static std::unordered_map<HANDLE, std::unique_ptr<TimerState>> activeTimers;
 static std::mutex timersMutex;
 
-// Simple timestamped logging
 #define LOG_INFO(msg) do { \
     std::ostringstream oss; \
     oss << "[epoch-timer " << current_epoch_ms() << "ms] " << msg << std::endl; \
@@ -34,9 +33,8 @@ static VOID CALLBACK TimerCallback(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired
         return;
     }
 
-    HANDLE timer_handle = state->timer_handle;  // Save before potential delete
+    HANDLE timer_handle = state->timer_handle;  
 
-    // Execute JavaScript callback
     napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function jsCb) {
         jsCb.Call({});
     });
