@@ -38,8 +38,8 @@ auto* state = static_cast<TimerState*>(lpParameter);
     
 HANDLE timer_handle = state->timer_handle;  // save before possible delete
 
-    napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function callback) {
-        callback.Call({});
+napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function jsCb) {
+        jsCb.Call({});
     });
 
     if (status != napi_ok) {
