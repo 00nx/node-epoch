@@ -6,6 +6,15 @@
 #include <iostream>
 #include <sstream>
 
+struct TimerState {
+    Napi::ThreadSafeFunction tsfn;
+    HANDLE timer_handle = nullptr;
+};
+
+static std::unordered_map<HANDLE, std::unique_ptr<TimerState>> activeTimers;
+static std::mutex timersMutex;
+
+// Simple timestamped logging
 #define LOG_INFO(msg) do { \
     std::ostringstream oss; \
     oss << "[epoch-timer " << current_epoch_ms() << "ms] " << msg << std::endl; \
@@ -18,53 +27,48 @@
     std::cerr << oss.str(); \
 } while(0)
 
-struct TimerState {
-    Napi::ThreadSafeFunction tsfn;
-    HANDLE timer_handle = nullptr;
-};
-
-static std::unordered_map<HANDLE, std::unique_ptr<TimerState>> activeTimers;
-static std::mutex timersMutex;
-
-
-
 static VOID CALLBACK TimerCallback(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired*/) {
-auto* state = static_cast<TimerState*>(lpParameter);
+    auto* state = static_cast<TimerState*>(lpParameter);
     if (!state) {
-        LOG_ERROR("TimerCallback called with null state");
+        LOG_ERROR("TimerCallback called with null state pointer");
         return;
-    
     }
-    
-HANDLE timer_handle = state->timer_handle;  // save before possible delete
 
-napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function jsCb) {
+    HANDLE timer_handle = state->timer_handle;  // Save before potential delete
+
+    // Execute JavaScript callback
+    napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function jsCb) {
         jsCb.Call({});
     });
 
-if (status != napi_ok) {
-        LOG_ERROR("ThreadSafeFunction.BlockingCall failed: " << status);
+    if (status != napi_ok) {
+        LOG_ERROR("ThreadSafeFunction.BlockingCall failed with status: " << status);
     }
 
-    // Cleanup
-{
+    // Cleanup phase
+    {
         std::lock_guard<std::mutex> lock(timersMutex);
-
         auto it = activeTimers.find(timer_handle);
-        if (it == activeTimers.end()) {
-            LOG_ERROR("Timer not found in activeTimers during cleanup: " << timer_handle);
-        } else {
+        if (it != activeTimers.end()) {
             activeTimers.erase(it);
+        } else {
+            LOG_ERROR("Timer not found in activeTimers map during cleanup: " << timer_handle);
         }
     }
 
-// Important: Delete timer **before** releasing tsfn and deleting state
+    // Delete the timer (wait-only mode is safe here)
     if (!DeleteTimerQueueTimer(nullptr, timer_handle, nullptr)) {
         DWORD err = GetLastError();
-        if (err != ERROR_IO_PENDING) {  // ERROR_IO_PENDING is normal for wait-only delete
-            LOG_ERROR("DeleteTimerQueueTimer failed: " << err);
+        if (err != ERROR_IO_PENDING && err != ERROR_SUCCESS) {
+            LOG_ERROR("DeleteTimerQueueTimer failed with error: " << err);
         }
     }
+
+    // Final resource cleanup
+    state->tsfn.Release();
+    delete state;
+
+    LOG_INFO("Timer completed and cleaned up: " << timer_handle);
 }
 
 static int64_t normalize_to_ms(const std::string& unit, double value) {
@@ -109,12 +113,13 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     int64_t delay_ms = target_ms - now_ms;
 
     if (delay_ms <= 0) {
-        LOG_INFO("Immediate execution (already passed): " << delay_ms << "ms");
+        LOG_INFO("Immediate execution (target already passed): " << target_ms 
+                 << " (delay: " << delay_ms << "ms)");
         callback.Call({});
         return env.Undefined();
     }
 
-    LOG_INFO("Scheduling timer to epoch " << target_ms << " (in " << delay_ms << " ms)");
+    LOG_INFO("Scheduling timer to epoch " << target_ms << " ms (in " << delay_ms << " ms)");
 
     auto state = std::make_unique<TimerState>();
 
@@ -123,25 +128,27 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         callback,
         "EpochTimer",
         0,      // unlimited queue
-        1,      // only 1 thread may use it
-        [](Napi::Env) { LOG_INFO("ThreadSafeFunction finalizer called"); }
+        1,      // only one thread may call the function
+        [](Napi::Env) { 
+            LOG_INFO("ThreadSafeFunction finalizer invoked"); 
+        }
     );
 
     HANDLE timer_handle = nullptr;
-    BOOL ok = CreateTimerQueueTimer(
+    BOOL success = CreateTimerQueueTimer(
         &timer_handle,
         nullptr,
         TimerCallback,
         state.get(),
         static_cast<DWORD>(delay_ms),
-        0,
+        0,      // one-shot
         WT_EXECUTEONLYONCE | WT_EXECUTEINTIMERTHREAD | WT_EXECUTELONGFUNCTION
     );
 
-    if (!ok) {
+    if (!success) {
         DWORD err = GetLastError();
         state->tsfn.Release();
-        std::string msg = "CreateTimerQueueTimer failed with error " + std::to_string(err);
+        std::string msg = "CreateTimerQueueTimer failed with error code: " + std::to_string(err);
         LOG_ERROR(msg);
         Napi::Error::New(env, msg).ThrowAsJavaScriptException();
         return env.Undefined();
@@ -154,7 +161,7 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         activeTimers[timer_handle] = std::move(state);
     }
 
-    LOG_INFO("Timer created successfully: " << timer_handle << " (delay: " << delay_ms << "ms)");
+    LOG_INFO("Timer created successfully: handle=" << timer_handle << " delay=" << delay_ms << "ms");
 
     return env.Undefined();
 }
