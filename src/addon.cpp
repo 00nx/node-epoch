@@ -33,8 +33,10 @@ auto* state = static_cast<TimerState*>(lpParameter);
     if (!state) {
         LOG_ERROR("TimerCallback called with null state");
         return;
+    
     }
-
+    
+HANDLE timer_handle = state->timer_handle;  // save before possible delete
 
     napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function callback) {
         callback.Call({});
