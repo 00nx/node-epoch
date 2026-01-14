@@ -126,7 +126,7 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         callback,
         "EpochTimer",
         0,      // unlimited queue
-        1,      // only one thread may call the function
+        1,      
         [](Napi::Env) { 
             LOG_INFO("ThreadSafeFunction finalizer invoked"); 
         }
@@ -139,7 +139,7 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         TimerCallback,
         state.get(),
         static_cast<DWORD>(delay_ms),
-        0,      // one-shot
+        0,      
         WT_EXECUTEONLYONCE | WT_EXECUTEINTIMERTHREAD | WT_EXECUTELONGFUNCTION
     );
 
