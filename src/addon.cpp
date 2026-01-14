@@ -6,6 +6,13 @@
 #include <iostream>
 #include <sstream>
 
+#define LOG_INFO(msg) do { \
+    std::ostringstream oss; \
+    oss << "[epoch-timer " << current_epoch_ms() << "ms] " << msg << std::endl; \
+    std::cerr << oss.str(); \
+} while(0)
+
+
 struct TimerState {
     Napi::ThreadSafeFunction tsfn;
     HANDLE timer_handle = nullptr;
@@ -13,6 +20,8 @@ struct TimerState {
 
 static std::unordered_map<HANDLE, std::unique_ptr<TimerState>> activeTimers;
 static std::mutex timersMutex;
+
+
 
 static VOID CALLBACK TimerCallback(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired*/) {
     auto* state = static_cast<TimerState*>(lpParameter);
