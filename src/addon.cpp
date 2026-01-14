@@ -85,7 +85,7 @@ static int64_t current_epoch_ms() {
 Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
-if (info.Length() != 3 ||
+    if (info.Length() != 3 ||
         !info[0].IsString() ||
         !info[1].IsNumber() ||
         !info[2].IsFunction()) {
@@ -100,7 +100,8 @@ if (info.Length() != 3 ||
 
     int64_t target_ms = normalize_to_ms(unit, value);
     if (target_ms <= 0) {
-        Napi::TypeError::New(env, "Invalid unit or value <= 0").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "Invalid unit or value <= 0 (unit: " + unit + ")")
+            .ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
@@ -108,9 +109,12 @@ if (info.Length() != 3 ||
     int64_t delay_ms = target_ms - now_ms;
 
     if (delay_ms <= 0) {
+        LOG_INFO("Immediate execution (already passed): " << delay_ms << "ms");
         callback.Call({});
         return env.Undefined();
     }
+
+    LOG_INFO("Scheduling timer to epoch " << target_ms << " (in " << delay_ms << " ms)");
 
     auto state = std::make_unique<TimerState>();
 
@@ -118,30 +122,39 @@ if (info.Length() != 3 ||
         env,
         callback,
         "EpochTimer",
-        0,   
-        1     
+        0,      // unlimited queue
+        1,      // only 1 thread may use it
+        [](Napi::Env) { LOG_INFO("ThreadSafeFunction finalizer called"); }
     );
 
+    HANDLE timer_handle = nullptr;
     BOOL ok = CreateTimerQueueTimer(
-        &state->timer_handle,
-        nullptr,                     
+        &timer_handle,
+        nullptr,
         TimerCallback,
-        state.get(),                   // pass ownership via raw pointer
+        state.get(),
         static_cast<DWORD>(delay_ms),
-        0,                             // one shot
-        WT_EXECUTEONLYONCE | WT_EXECUTEINTIMERTHREAD
+        0,
+        WT_EXECUTEONLYONCE | WT_EXECUTEINTIMERTHREAD | WT_EXECUTELONGFUNCTION
     );
 
     if (!ok) {
+        DWORD err = GetLastError();
         state->tsfn.Release();
-        Napi::Error::New(env, "CreateTimerQueueTimer failed").ThrowAsJavaScriptException();
+        std::string msg = "CreateTimerQueueTimer failed with error " + std::to_string(err);
+        LOG_ERROR(msg);
+        Napi::Error::New(env, msg).ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
+    state->timer_handle = timer_handle;
+
     {
         std::lock_guard<std::mutex> lock(timersMutex);
-        activeTimers[state->timer_handle] = std::move(state);
+        activeTimers[timer_handle] = std::move(state);
     }
+
+    LOG_INFO("Timer created successfully: " << timer_handle << " (delay: " << delay_ms << "ms)");
 
     return env.Undefined();
 }
