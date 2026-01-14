@@ -29,8 +29,11 @@ static std::mutex timersMutex;
 
 
 static VOID CALLBACK TimerCallback(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired*/) {
-    auto* state = static_cast<TimerState*>(lpParameter);
-    if (!state) return;
+auto* state = static_cast<TimerState*>(lpParameter);
+    if (!state) {
+        LOG_ERROR("TimerCallback called with null state");
+        return;
+    }
 
 
     napi_status status = state->tsfn.BlockingCall([](Napi::Env env, Napi::Function callback) {
