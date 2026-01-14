@@ -85,7 +85,7 @@ static int64_t current_epoch_ms() {
 Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
 
-    if (info.Length() != 3 ||
+if (info.Length() != 3 ||
         !info[0].IsString() ||
         !info[1].IsNumber() ||
         !info[2].IsFunction()) {
