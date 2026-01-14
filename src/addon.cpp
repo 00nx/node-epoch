@@ -58,9 +58,13 @@ if (status != napi_ok) {
         }
     }
 
-    DeleteTimerQueueTimer(nullptr, state->timer_handle, nullptr);
-    state->tsfn.Release();
-    delete state;
+// Important: Delete timer **before** releasing tsfn and deleting state
+    if (!DeleteTimerQueueTimer(nullptr, timer_handle, nullptr)) {
+        DWORD err = GetLastError();
+        if (err != ERROR_IO_PENDING) {  // ERROR_IO_PENDING is normal for wait-only delete
+            LOG_ERROR("DeleteTimerQueueTimer failed: " << err);
+        }
+    }
 }
 
 static int64_t normalize_to_ms(const std::string& unit, double value) {
