@@ -47,9 +47,15 @@ if (status != napi_ok) {
     }
 
     // Cleanup
-    {
+{
         std::lock_guard<std::mutex> lock(timersMutex);
-        activeTimers.erase(state->timer_handle);
+
+        auto it = activeTimers.find(timer_handle);
+        if (it == activeTimers.end()) {
+            LOG_ERROR("Timer not found in activeTimers during cleanup: " << timer_handle);
+        } else {
+            activeTimers.erase(it);
+        }
     }
 
     DeleteTimerQueueTimer(nullptr, state->timer_handle, nullptr);
