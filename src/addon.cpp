@@ -111,8 +111,7 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     int64_t delay_ms = target_ms - now_ms;
 
     if (delay_ms <= 0) {
-        LOG_INFO("Immediate execution (target already passed): " << target_ms 
-                 << " (delay: " << delay_ms << "ms)");
+        LOG_INFO("Target time already passed, executing callback immediately");
         callback.Call({});
         return env.Undefined();
     }
