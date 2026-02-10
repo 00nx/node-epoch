@@ -17,13 +17,13 @@ static std::mutex timersMutex;
 #define LOG_INFO(msg) do { \
     std::ostringstream oss; \
     oss << "[epoch-timer " << current_epoch_ms() << "ms] " << msg << std::endl; \
-    std::cerr << oss.str(); \
+    std::cerr << oss.str() << std::flush; \
 } while(0)
 
 #define LOG_ERROR(msg) do { \
     std::ostringstream oss; \
     oss << "[epoch-timer ERROR " << current_epoch_ms() << "ms] " << msg << std::endl; \
-    std::cerr << oss.str(); \
+    std::cerr << oss.str() << std::flush; \
 } while(0)
 
 static VOID CALLBACK TimerCallback(PVOID lpParameter, BOOLEAN /*TimerOrWaitFired*/) {
