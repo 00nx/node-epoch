@@ -101,7 +101,7 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     Napi::Function callback = info[2].As<Napi::Function>();
 
     int64_t target_ms = normalize_to_ms(unit, value);
-    if (target_ms <= 0) {
+    if (target_ms < 1) {
         Napi::TypeError::New(env, "Invalid unit or value <= 0 (unit: " + unit + ")")
             .ThrowAsJavaScriptException();
         return env.Undefined();
