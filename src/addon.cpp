@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <iomanip>
 
 namespace {
 
@@ -15,20 +16,22 @@ namespace {
 
 struct TimerState {
     Napi::ThreadSafeFunction tsfn;
-    HANDLE timer_handle = nullptr;  
+    HANDLE timer_handle = nullptr;
 
     explicit TimerState(Napi::ThreadSafeFunction&& func)
         : tsfn(std::move(func)) {}
 
     ~TimerState() {
-        if (tsfn) tsfn.Release();
+        if (tsfn) {
+            tsfn.Release();
+        }
     }
 
     TimerState(const TimerState&) = delete;
     TimerState& operator=(const TimerState&) = delete;
 };
 
-// Active timers — protected by mutex
+// Protected map of active timers
 static std::unordered_map<HANDLE, std::unique_ptr<TimerState>> activeTimers;
 static std::mutex timersMutex;
 
@@ -40,15 +43,15 @@ int64_t current_epoch_ms() {
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
     ULARGE_INTEGER uli{ft.dwLowDateTime, ft.dwHighDateTime};
-    // Convert 100-ns intervals since 1601-01-01 to milliseconds since 1970-01-01
+    // 100-ns ticks since 1601 → ms since 1970
     return static_cast<int64_t>((uli.QuadPart - 116444736000000000ULL) / 10000ULL);
 }
 
-int64_t normalize_to_ms(const std::string& unit, double value) {
-    if (unit == "s")   return static_cast<int64_t>(value * 1000.0 + 0.5);
-    if (unit == "ms")  return static_cast<int64_t>(value + 0.5);
-    if (unit == "us")  return static_cast<int64_t>(value / 1000.0 + 0.5);
-    if (unit == "ns")  return static_cast<int64_t>(value / 1'000'000.0 + 0.5);
+int64_t normalize_interval(const std::string& unit, double value) {
+    if (unit == "s")  return static_cast<int64_t>(value * 1000.0 + 0.5);
+    if (unit == "ms") return static_cast<int64_t>(value + 0.5);
+    if (unit == "us") return static_cast<int64_t>(value / 1000.0 + 0.5);
+    if (unit == "ns") return static_cast<int64_t>(value / 1'000'000.0 + 0.5);
     return -1;
 }
 
@@ -67,54 +70,48 @@ std::string format_log(const char* level, const std::string& msg, uintptr_t hand
 #define LOG_ERROR(msg, ...)  do { std::cerr << format_log("ERROR", msg, ##__VA_ARGS__); } while(0)
 
 ////////////////////////////////////////////////////////////////////////////////
-// Timer Callback
+// Timer Callback (runs on thread-pool thread)
 ////////////////////////////////////////////////////////////////////////////////
 
 VOID CALLBACK TimerCallback(PVOID param, BOOLEAN /*TimerOrWaitFired*/) {
     auto* state = static_cast<TimerState*>(param);
-    if (!state) {
-        LOG_ERROR("TimerCallback received null state");
+    if (!state || !state->timer_handle) {
+        LOG_ERROR("TimerCallback received invalid state");
         return;
     }
 
-    HANDLE timer_handle = state->timer;
+    const HANDLE timer_h = state->timer_handle;
 
-    // Call JS callback
-napi_status status = state->tsfn.NonBlockingCall([](Napi::Env env, Napi::Function js_cb) {
-    js_cb.Call({});
-});
+    // Prefer NonBlockingCall in timer-thread context
+    napi_status status = state->tsfn.NonBlockingCall([](Napi::Env env, Napi::Function js_cb) {
+        js_cb.Call({});
+    });
 
-if (status == napi_closing) {
-    LOG_INFO("TSFN closing during callback", reinterpret_cast<uintptr_t>(timer_h));
-} else if (status != napi_ok) {
-    LOG_ERROR("TSFN call failed: " + std::to_string(status), reinterpret_cast<uintptr_t>(timer_h));
-}
-
-    if (status != napi_ok) {
-        LOG_ERROR("ThreadSafeFunction::BlockingCall failed: " + std::to_string(status));
+    if (status == napi_closing) {
+        LOG_INFO("TSFN closing during callback", reinterpret_cast<uintptr_t>(timer_h));
+    } else if (status != napi_ok) {
+        LOG_ERROR("TSFN call failed: " + std::to_string(status), reinterpret_cast<uintptr_t>(timer_h));
     }
 
     // Cleanup
     {
         std::lock_guard<std::mutex> lock(timersMutex);
-        activeTimers.erase(timer_handle);
+        activeTimers.erase(timer_h);
     }
 
-    // Delete timer
-    if (!DeleteTimerQueueTimer(nullptr, timer_handle, nullptr)) {
+    // Delete the timer
+    if (!DeleteTimerQueueTimer(nullptr, timer_h, nullptr)) {
         DWORD err = GetLastError();
         if (err != ERROR_IO_PENDING && err != ERROR_SUCCESS) {
-            LOG_ERROR("DeleteTimerQueueTimer failed: " + std::to_string(err));
+            LOG_ERROR("DeleteTimerQueueTimer failed: " + std::to_string(err), reinterpret_cast<uintptr_t>(timer_h));
         }
     }
 
-    // state will be deleted automatically (unique_ptr)
-    // tsfn is released in destructor
-    LOG_INFO("Timer completed and cleaned up: " + std::to_string(reinterpret_cast<uintptr_t>(timer_handle)));
+    LOG_INFO("Timer completed & cleaned up", reinterpret_cast<uintptr_t>(timer_h));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Main exported function
+// Exported function: setEpochTimer(unit: string, value: number, callback: () => void)
 ////////////////////////////////////////////////////////////////////////////////
 
 Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
@@ -124,32 +121,35 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         !info[0].IsString() ||
         !info[1].IsNumber() ||
         !info[2].IsFunction()) {
-        Napi::TypeError::New(env, "Usage: setEpochTimer(unit: string, value: number, callback: function)")
+        Napi::TypeError::New(env,
+            "Usage: setEpochTimer(unit: 's'|'ms'|'us'|'ns', value: number, callback: () => void)")
             .ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
-    std::string unit   = info[0].As<Napi::String>().Utf8Value();
-    double value       = info[1].As<Napi::Number>().DoubleValue();
-    Napi::Function cb  = info[2].As<Napi::Function>();
+    std::string unit  = info[0].As<Napi::String>().Utf8Value();
+    double      value = info[1].As<Napi::Number>().DoubleValue();
+    Napi::Function cb = info[2].As<Napi::Function>();
 
-    int64_t target_ms = normalize_to_ms(unit, value);
+    int64_t target_ms = normalize_interval(unit, value);
     if (target_ms <= 0) {
-        Napi::TypeError::New(env, "Invalid unit or value <= 0").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "Invalid unit or value ≤ 0").ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
     int64_t now_ms   = current_epoch_ms();
     int64_t delay_ms = target_ms - now_ms;
 
-    if (delay_ms > 0xFFFFFFFFLL) {
-    Napi::RangeError::New(env, "Delay too large (> ~49.7 days)").ThrowAsJavaScriptException();
-    return env.Undefined();
-}
-    
     if (delay_ms <= 0) {
-        LOG_INFO("Immediate execution (target passed): " + std::to_string(target_ms));
+        LOG_INFO("Immediate execution (target already passed): " + std::to_string(target_ms));
         cb.Call({});
+        return env.Undefined();
+    }
+
+    // Windows CreateTimerQueueTimer uses DWORD → max ~49.7 days
+    if (delay_ms > 0xFFFFFFFFLL) {
+        Napi::RangeError::New(env, "Delay too large (maximum supported ~49.7 days)")
+            .ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
@@ -169,19 +169,19 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     auto state = std::make_unique<TimerState>(std::move(tsfn));
 
     HANDLE timer_handle = nullptr;
-    BOOL ok = CreateTimerQueueTimer(
+    BOOL success = CreateTimerQueueTimer(
         &timer_handle,
-        nullptr,                        // default timer queue
+        nullptr,                        // default queue
         TimerCallback,
         state.get(),
         static_cast<DWORD>(delay_ms),
-        0,                              // no period → one-shot
+        0,                              // one-shot
         WT_EXECUTEONLYONCE |
         WT_EXECUTEINTIMERTHREAD |
         WT_EXECUTELONGFUNCTION
     );
 
-    if (!ok) {
+    if (!success) {
         DWORD err = GetLastError();
         std::string msg = "CreateTimerQueueTimer failed: " + std::to_string(err);
         LOG_ERROR(msg);
@@ -189,16 +189,15 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
 
-    // Store ownership
-    state->timer = timer_handle;
+    state->timer_handle = timer_handle;
 
     {
         std::lock_guard<std::mutex> lock(timersMutex);
         activeTimers[timer_handle] = std::move(state);
     }
 
-    LOG_INFO("Timer created: handle=" + std::to_string(reinterpret_cast<uintptr_t>(timer_handle)) +
-             ", delay=" + std::to_string(delay_ms) + "ms");
+    LOG_INFO("Timer created  delay=" + std::to_string(delay_ms) + " ms",
+             reinterpret_cast<uintptr_t>(timer_handle));
 
     return env.Undefined();
 }
