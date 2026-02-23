@@ -1,6 +1,22 @@
 # Node-Epoch
 ## 🆕 Changelog
 
+
+# Node-Epoch
+## 🆕 Changelog
+
+### v2.3.0 — Observability & Robustness Release
+**Quality-of-life improvements, better diagnostics, and production hardening**
+
+#### Added
+- New optional `return handle` behavior: `setEpochTimer(…)` now returns a string timer ID (hex handle) that can be used later for debugging or potential future cancellation
+- Support for logging to file (optional): via new environment variable `EPOCH_TIMER_LOG_FILE=path/to/file.log`
+- Timer age warning: logs `[WARN]` when a timer has been scheduled for > 24 hours
+- Graceful degradation message when `napi_closing` is received during callback (helps diagnose unclean shutdowns)
+- New log field: actual scheduled delay in human-readable form (e.g. "3h 14m 22s")
+- Initial support for basic statistics collection (active timer count, total timers fired) — lo
+
+- 
 ### v2.0.0
 **Major rewrite & modernization**
 
