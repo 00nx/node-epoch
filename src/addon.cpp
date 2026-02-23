@@ -15,16 +15,17 @@ namespace {
 
 struct TimerState {
     Napi::ThreadSafeFunction tsfn;
-    HANDLE timer = nullptr;
+    HANDLE timer_handle = nullptr;  
 
-    explicit TimerState(Napi::ThreadSafeFunction&& func) 
+    explicit TimerState(Napi::ThreadSafeFunction&& func)
         : tsfn(std::move(func)) {}
-    
+
     ~TimerState() {
-        if (tsfn) {
-            tsfn.Release();
-        }
+        if (tsfn) tsfn.Release();
     }
+
+    TimerState(const TimerState&) = delete;
+    TimerState& operator=(const TimerState&) = delete;
 };
 
 // Active timers — protected by mutex
