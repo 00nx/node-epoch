@@ -51,14 +51,19 @@ int64_t normalize_to_ms(const std::string& unit, double value) {
     return -1;
 }
 
-std::string format_log(const char* level, const std::string& msg) {
+std::string format_log(const char* level, const std::string& msg, uintptr_t handle = 0) {
     std::ostringstream oss;
-    oss << "[epoch-timer " << level << " " << current_epoch_ms() << "ms] " << msg << "\n";
+    oss << "[epoch-timer " << level << "] "
+        << current_epoch_ms() << " ms  ";
+    if (handle != 0) {
+        oss << "T:" << std::hex << std::setw(16) << std::setfill('0') << handle << "  ";
+    }
+    oss << msg << "\n";
     return oss.str();
 }
 
-#define LOG_INFO(msg)  do { std::cerr << format_log("INFO", msg); } while(0)
-#define LOG_ERROR(msg) do { std::cerr << format_log("ERROR", msg); } while(0)
+#define LOG_INFO(msg, ...)   do { std::cerr << format_log("INFO",  msg, ##__VA_ARGS__); } while(0)
+#define LOG_ERROR(msg, ...)  do { std::cerr << format_log("ERROR", msg, ##__VA_ARGS__); } while(0)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Timer Callback
