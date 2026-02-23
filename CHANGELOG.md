@@ -16,7 +16,6 @@
 - New log field: actual scheduled delay in human-readable form (e.g. "3h 14m 22s")
 - Initial support for basic statistics collection (active timer count, total timers fired) — lo
 
-- 
 ### v2.0.0
 **Major rewrite & modernization**
 
