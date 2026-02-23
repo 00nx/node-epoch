@@ -136,6 +136,10 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     int64_t now_ms   = current_epoch_ms();
     int64_t delay_ms = target_ms - now_ms;
 
+    if (delay_ms > 0xFFFFFFFFLL) {
+    Napi::RangeError::New(env, "Delay too large (> ~49.7 days)").ThrowAsJavaScriptException();
+    return env.Undefined();
+}
     
     if (delay_ms <= 0) {
         LOG_INFO("Immediate execution (target passed): " + std::to_string(target_ms));
