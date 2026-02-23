@@ -74,9 +74,15 @@ VOID CALLBACK TimerCallback(PVOID param, BOOLEAN /*TimerOrWaitFired*/) {
     HANDLE timer_handle = state->timer;
 
     // Call JS callback
-    napi_status status = state->tsfn.BlockingCall([](Napi::Env, Napi::Function js_cb) {
-        js_cb.Call({});
-    });
+napi_status status = state->tsfn.NonBlockingCall([](Napi::Env env, Napi::Function js_cb) {
+    js_cb.Call({});
+});
+
+if (status == napi_closing) {
+    LOG_INFO("TSFN closing during callback", reinterpret_cast<uintptr_t>(timer_h));
+} else if (status != napi_ok) {
+    LOG_ERROR("TSFN call failed: " + std::to_string(status), reinterpret_cast<uintptr_t>(timer_h));
+}
 
     if (status != napi_ok) {
         LOG_ERROR("ThreadSafeFunction::BlockingCall failed: " + std::to_string(status));
