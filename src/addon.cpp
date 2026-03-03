@@ -72,7 +72,6 @@ std::string format_log(const char* level, const std::string& msg, uintptr_t hand
 ////////////////////////////////////////////////////////////////////////////////
 // Timer Callback (runs on thread-pool thread)
 ////////////////////////////////////////////////////////////////////////////////
-
 VOID CALLBACK TimerCallback(PVOID param, BOOLEAN /*TimerOrWaitFired*/) {
     auto* state = static_cast<TimerState*>(param);
     if (!state || !state->timer_handle) {
@@ -81,33 +80,36 @@ VOID CALLBACK TimerCallback(PVOID param, BOOLEAN /*TimerOrWaitFired*/) {
     }
 
     const HANDLE timer_h = state->timer_handle;
+    uintptr_t h = reinterpret_cast<uintptr_t>(timer_h);
 
-    // Prefer NonBlockingCall in timer-thread context
     napi_status status = state->tsfn.NonBlockingCall([](Napi::Env env, Napi::Function js_cb) {
         js_cb.Call({});
     });
 
     if (status == napi_closing) {
-        LOG_INFO("TSFN closing during callback", reinterpret_cast<uintptr_t>(timer_h));
+        LOG_INFO("TSFN already closing during callback", h);
     } else if (status != napi_ok) {
-        LOG_ERROR("TSFN call failed: " + std::to_string(status), reinterpret_cast<uintptr_t>(timer_h));
+        LOG_ERROR("TSFN NonBlockingCall failed: " + std::to_string(status), h);
     }
 
-    // Cleanup
+    // Cleanup map entry
     {
         std::lock_guard<std::mutex> lock(timersMutex);
         activeTimers.erase(timer_h);
     }
 
-    // Delete the timer
+    // Explicitly release so finalizer can run
+    state->tsfn.Release();
+    state->tsfn = nullptr;           // ← prevents double-release in ~TimerState()
+
     if (!DeleteTimerQueueTimer(nullptr, timer_h, nullptr)) {
         DWORD err = GetLastError();
         if (err != ERROR_IO_PENDING && err != ERROR_SUCCESS) {
-            LOG_ERROR("DeleteTimerQueueTimer failed: " + std::to_string(err), reinterpret_cast<uintptr_t>(timer_h));
+            LOG_ERROR("DeleteTimerQueueTimer failed: " + std::to_string(err), h);
         }
     }
 
-    LOG_INFO("Timer completed & cleaned up", reinterpret_cast<uintptr_t>(timer_h));
+    LOG_INFO("Timer completed & cleaned up", h);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
