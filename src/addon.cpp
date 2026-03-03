@@ -27,6 +27,19 @@ struct TimerState {
         }
     }
 
+    void SafeCall() {
+        napi_status status = tsfn.NonBlockingCall(
+            [](Napi::Env env, Napi::Function js_cb) {
+                js_cb.Call({});
+            }
+        );
+
+        if (status != napi_ok && status != napi_closing) {
+            LOG_ERROR("TSFN NonBlockingCall failed: " + std::to_string(status),
+                      reinterpret_cast<uintptr_t>(timer_handle));
+        }
+    }
+
     TimerState(const TimerState&) = delete;
     TimerState& operator=(const TimerState&) = delete;
 };
@@ -72,44 +85,32 @@ std::string format_log(const char* level, const std::string& msg, uintptr_t hand
 ////////////////////////////////////////////////////////////////////////////////
 // Timer Callback (runs on thread-pool thread)
 ////////////////////////////////////////////////////////////////////////////////
-VOID CALLBACK TimerCallback(PVOID param, BOOLEAN /*TimerOrWaitFired*/) {
+VOID CALLBACK TimerCallback(PVOID param, BOOLEAN) {
     auto* state = static_cast<TimerState*>(param);
     if (!state || !state->timer_handle) {
-        LOG_ERROR("TimerCallback received invalid state");
+        LOG_ERROR("Invalid TimerState in callback");
         return;
     }
 
-    const HANDLE timer_h = state->timer_handle;
+    HANDLE timer_h = state->timer_handle;
     uintptr_t h = reinterpret_cast<uintptr_t>(timer_h);
 
-    napi_status status = state->tsfn.NonBlockingCall([](Napi::Env env, Napi::Function js_cb) {
-        js_cb.Call({});
-    });
-
-    if (status == napi_closing) {
-        LOG_INFO("TSFN already closing during callback", h);
-    } else if (status != napi_ok) {
-        LOG_ERROR("TSFN NonBlockingCall failed: " + std::to_string(status), h);
-    }
-
-    // Cleanup map entry
     {
         std::lock_guard<std::mutex> lock(timersMutex);
         activeTimers.erase(timer_h);
     }
 
-    // Explicitly release so finalizer can run
-    state->tsfn.Release();
-    state->tsfn = nullptr;           // ← prevents double-release in ~TimerState()
+    state->SafeCall();
 
-    if (!DeleteTimerQueueTimer(nullptr, timer_h, nullptr)) {
+    // Ensure no further callbacks
+    if (!DeleteTimerQueueTimer(nullptr, timer_h, INVALID_HANDLE_VALUE)) {
         DWORD err = GetLastError();
         if (err != ERROR_IO_PENDING && err != ERROR_SUCCESS) {
             LOG_ERROR("DeleteTimerQueueTimer failed: " + std::to_string(err), h);
         }
     }
 
-    LOG_INFO("Timer completed & cleaned up", h);
+    LOG_INFO("Timer executed & cleaned up", h);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -140,7 +141,10 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     }
 
     int64_t now_ms   = current_epoch_ms();
-    int64_t delay_ms = target_ms - now_ms;
+    int64_t delay_ms = 0;
+if (target_ms > now_ms) {
+    delay_ms = target_ms - now_ms;
+}
 
     if (delay_ms <= 0) {
         LOG_INFO("Immediate execution (target already passed): " + std::to_string(target_ms));
@@ -159,14 +163,17 @@ Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
              " ms (in " + std::to_string(delay_ms) + " ms)");
 
     // Create ThreadSafeFunction
-    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
-        env,
-        cb,
-        "EpochTimer",
-        0,      // unlimited queue
-        1,      // ref count
-        [](Napi::Env) { LOG_INFO("ThreadSafeFunction finalizer called"); }
-    );
+Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+    env,
+    cb,
+    "EpochTimer",
+    0,          // unlimited queue
+    1,          // initial thread count
+    nullptr,    // context
+    [](Napi::Env) {
+        LOG_INFO("TSFN finalizer executed");
+    }
+);
 
     auto state = std::make_unique<TimerState>(std::move(tsfn));
 
