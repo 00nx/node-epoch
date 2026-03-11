@@ -1,40 +1,57 @@
 {
   "name": "node-epoch",
-  "version": "0.1.0",
-  "description": "High-precision absolute epoch timer for Node.js on Windows",
+  "version": "2.0.0",
+  "description": "High-precision absolute-time epoch timer for Node.js on Windows using Timer Queue",
   "main": "index.js",
-  "files": [
-    "index.js",
-    "binding.gyp",
-    "src/"
-  ],
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./index.js",
+      "types":   "./index.d.ts"
+    }
+  },
+  "gypfile": true,
+  "scripts": {
+    "build":        "node-gyp rebuild",
+    "build:debug":  "node-gyp rebuild --debug",
+    "clean":        "node-gyp clean",
+    "rebuild":      "node-gyp rebuild",
+    "test":         "node test/index.test.js",
+    "test:bench":   "node test/bench.js",
+    "prepublishOnly": "npm run build"
+  },
   "keywords": [
-    "timer",
-    "epoch",
-    "windows",
-    "high-precision",
-    "trading",
-    "realtime"
+    "timer", "epoch", "high-precision", "low-latency", "windows",
+    "trading", "realtime", "n-api", "addon", "timeout", "scheduler"
   ],
-  "author": "aswin (@6crypt)",
-  "license": "MIT",
+  "author": "00nx",
+  "license": "GPL-3.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/00nx/node-epoch.git"
+    "url":  "https://github.com/00nx/node-epoch.git"
   },
+  "bugs": {
+    "url": "https://github.com/00nx/node-epoch/issues"
+  },
+  "homepage": "https://github.com/00nx/node-epoch#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": ["win32"],
   "dependencies": {
+    "bindings":      "^1.5.0",
     "node-addon-api": "^8.0.0"
   },
   "devDependencies": {
     "node-gyp": "^10.0.0"
   },
-  "scripts": {
-    "build": "node-gyp rebuild",
-    "clean": "node-gyp clean"
-  },
-  "gypfile": true,
-  "os": ["win32"],
-  "engines": {
-    "node": ">=18.0.0"
-  }
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "binding.gyp",
+    "src/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ]
 }
