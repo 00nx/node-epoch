@@ -89,16 +89,12 @@ static VOID CALLBACK TimerProc(PVOID lpParam, BOOLEAN /*TimerOrWaitFired*/) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Cleanup helper — called after the TSFN fires (on JS thread) or on cancel
-// ---------------------------------------------------------------------------
 
 static void CleanupContext(uint64_t id) {
     std::lock_guard<std::mutex> lock(g_mapMtx);
     auto it = g_timers.find(id);
     if (it != g_timers.end()) {
-        // DeleteTimerQueueTimer with INVALID_HANDLE_VALUE blocks until the
-        // callback completes; use NULL to allow async cleanup instead.
+
         if (it->second->timerHandle) {
             DeleteTimerQueueTimer(g_timerQueue, it->second->timerHandle, nullptr);
         }
@@ -107,21 +103,14 @@ static void CleanupContext(uint64_t id) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Compute delay in milliseconds from an absolute epoch value
-// Returns 0 if the target is in the past (fire immediately via next-tick).
-// ---------------------------------------------------------------------------
 
 static DWORD ComputeDelayMs(const std::string& unit, double value) {
-    // Obtain current time in milliseconds (high precision)
     FILETIME ft;
     GetSystemTimePreciseAsFileTime(&ft);
-    // FILETIME is 100-ns intervals since 1601-01-01
     ULARGE_INTEGER ui;
     ui.LowPart  = ft.dwLowDateTime;
     ui.HighPart = ft.dwHighDateTime;
-    // Convert to Unix epoch ms: subtract 116444736000000000 (100-ns ticks from
-    // 1601-01-01 to 1970-01-01), then divide by 10000 to get ms.
+
     constexpr uint64_t EPOCH_DIFF_100NS = 116444736000000000ULL;
     double nowMs = static_cast<double>((ui.QuadPart - EPOCH_DIFF_100NS) / 10000ULL);
 
@@ -130,17 +119,14 @@ static DWORD ComputeDelayMs(const std::string& unit, double value) {
     else if (unit == "ms")  targetMs = value;
     else if (unit == "us")  targetMs = value / 1000.0;
     else if (unit == "ns")  targetMs = value / 1000000.0;
-    else                    targetMs = value;   // fallback: treat as ms
+    else                    targetMs = value;   
 
     double diffMs = targetMs - nowMs;
     if (diffMs <= 0.0) return 0;
     if (diffMs > static_cast<double>(MAXDWORD)) return MAXDWORD;
-    return static_cast<DWORD>(diffMs + 0.5);   // round to nearest ms
+    return static_cast<DWORD>(diffMs + 0.5);   
 }
 
-// ---------------------------------------------------------------------------
-// setEpochTimer(unit, value, callback) → BigInt handle
-// ---------------------------------------------------------------------------
 
 static Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
