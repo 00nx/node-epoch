@@ -177,17 +177,12 @@ static Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
 
     auto* ctx = new TimerContext(id, std::move(tsfn));
 
-    // Register callback that the TSFN will invoke on the JS thread
     ctx->tsfn.SetContext(ctx);
 
-    // Wrap tsfn call so we execute the JS callback and then clean up
-    // We use a typed lambda via Napi's non-blocking call pattern:
-    // The "data" parameter is unused; we capture id via closure in Finalizer.
-    // Re-set the JS callback by registering a custom call:
+
     {
-        // Override the TSFN callback by recreating with a proper JS-thread callback
-        // Teardown the one we made and redo with the proper form:
-        ctx->tsfn.Release();   // release the one created above
+
+        ctx->tsfn.Release();  
 
         ctx->tsfn = Napi::ThreadSafeFunction::New(
             env,
@@ -195,11 +190,10 @@ static Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
             "node-epoch-timer",
             0,
             1,
-            ctx,   // context pointer
+            ctx,  
             [](Napi::Env, void* /*finalizeData*/, TimerContext* /*ctx*/) {
-                // Finalizer — no-op; cleanup handled in JS callback
             },
-            ctx   // finalizeData (same as context here)
+            ctx  
         );
     }
 
