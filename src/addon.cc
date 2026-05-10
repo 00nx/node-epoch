@@ -278,20 +278,12 @@ static Napi::Value SetEpochTimer(const Napi::CallbackInfo& info) {
 
         ctx->timerHandle = timerHandle;
 
-        // Register the actual JS-thread callback (replaces default empty call)
-        // We need to store the callback separately since TSFN was created with cb.
-        // The NonBlockingCall in TimerProc will use the default JS callback (cb).
-        // Nothing more to do — TimerProc calls tsfn.NonBlockingCall() and
-        // the TSFN invokes cb() automatically.
     }
 
     // Return handle as BigInt for clearEpochTimer
     return Napi::BigInt::New(env, id);
 }
 
-// ---------------------------------------------------------------------------
-// clearEpochTimer(handle)
-// ---------------------------------------------------------------------------
 
 static Napi::Value ClearEpochTimer(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -324,9 +316,6 @@ static Napi::Value ClearEpochTimer(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-// ---------------------------------------------------------------------------
-// getTime(unit) → number — current wall-clock in requested unit
-// ---------------------------------------------------------------------------
 
 static Napi::Value GetTime(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -355,9 +344,6 @@ static Napi::Value GetTime(const Napi::CallbackInfo& info) {
     return Napi::Number::New(env, result);
 }
 
-// ---------------------------------------------------------------------------
-// setResolution(ms) — adjust system timer resolution
-// ---------------------------------------------------------------------------
 
 static Napi::Value SetResolution(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
@@ -378,9 +364,6 @@ static Napi::Value SetResolution(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
-// ---------------------------------------------------------------------------
-// Module init
-// ---------------------------------------------------------------------------
 
 static Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("setEpochTimer",   Napi::Function::New(env, SetEpochTimer));
