@@ -40,11 +40,7 @@
 
 #pragma comment(lib, "winmm.lib")
 
-// ---------------------------------------------------------------------------
-// Globals
-// ---------------------------------------------------------------------------
 
-// All live timer contexts indexed by an auto-increment id.
 static std::mutex                                        g_mapMtx;
 static std::unordered_map<uint64_t, struct TimerContext*> g_timers;
 static std::atomic<uint64_t>                             g_nextId{1};
@@ -52,15 +48,12 @@ static std::atomic<UINT>                                 g_currentPeriod{0};
 static HANDLE                                            g_timerQueue{nullptr};
 static std::once_flag                                    g_queueOnce;
 
-// ---------------------------------------------------------------------------
-// TimerContext — one allocation per pending timer
-// ---------------------------------------------------------------------------
 
 struct TimerContext {
     uint64_t                   id;
     Napi::ThreadSafeFunction   tsfn;
     HANDLE                     timerHandle{nullptr};
-    std::atomic<bool>          fired{false};   // prevent double-fire on cancel race
+    std::atomic<bool>          fired{false};  
     std::atomic<bool>          cancelled{false};
 
     explicit TimerContext(uint64_t _id, Napi::ThreadSafeFunction _tsfn)
@@ -71,9 +64,6 @@ struct TimerContext {
     }
 };
 
-// ---------------------------------------------------------------------------
-// Timer queue initialisation (lazy, once)
-// ---------------------------------------------------------------------------
 
 static void EnsureTimerQueue() {
     std::call_once(g_queueOnce, []() {
@@ -85,23 +75,17 @@ static void EnsureTimerQueue() {
     });
 }
 
-// ---------------------------------------------------------------------------
-// Timer callback — runs on Windows thread-pool
-// ---------------------------------------------------------------------------
 
 static VOID CALLBACK TimerProc(PVOID lpParam, BOOLEAN /*TimerOrWaitFired*/) {
     auto* ctx = reinterpret_cast<TimerContext*>(lpParam);
 
     bool expected = false;
     if (!ctx->fired.compare_exchange_strong(expected, true)) {
-        // Already fired or cancelled — skip
         return;
     }
 
-    // Dispatch callback onto the Node.js event loop
     napi_status status = ctx->tsfn.NonBlockingCall();
     if (status != napi_ok) {
-        // env is shutting down; nothing we can do
     }
 }
 
