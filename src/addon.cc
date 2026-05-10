@@ -1,16 +1,26 @@
 /**
- * node-epoch — High-precision absolute-time timer for Node.js on Windows
+ * node-epoch — High-precision absolute-time timers for Node.js on Windows
  *
- * Uses Windows Timer Queue (CreateTimerQueueTimer) combined with
- * timeBeginPeriod(1) to achieve 1 ms system timer resolution.
- * Callbacks are dispatched back onto the Node.js event loop via
- * Napi::ThreadSafeFunction so the addon is fully thread-safe.
+ * Provides precise wall-clock based timers using the Windows Timer Queue API
+ * (`CreateTimerQueueTimer`) together with `timeBeginPeriod(1)` to request
+ * 1 ms system timer resolution.
  *
- * Exported functions:
+ * Timer callbacks are safely forwarded back to the Node.js event loop through
+ * `Napi::ThreadSafeFunction`, making the addon thread-safe.
+ *
+ * Exported API:
  *   setEpochTimer(unit, value, callback) → timerHandle (BigInt)
+ *     Schedule a callback to run at an absolute wall-clock time.
+ *
  *   clearEpochTimer(timerHandle)
- *   getTime(unit) → number  (current wall-clock in requested unit)
- *   setResolution(ms)       (call timeBeginPeriod; default 1)
+ *     Cancel a previously scheduled timer.
+ *
+ *   getTime(unit) → number
+ *     Return the current wall-clock time in the requested unit.
+ *
+ *   setResolution(ms)
+ *     Request a system timer resolution using timeBeginPeriod.
+ *     Defaults to 1 ms.
  */
 
 #define NAPI_VERSION 6
